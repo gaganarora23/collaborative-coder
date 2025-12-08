@@ -1,126 +1,129 @@
-const { createServer } = require('http');
-const { Server } = require('socket.io');
+const request = require('supertest');
 const Client = require('socket.io-client');
-const { addUser, getRoom } = require('./roomManager');
+const http = require('http');
 
-describe('Server Integration', () => {
-    let io, serverSocket, clientSocket1, clientSocket2;
-    let httpServer;
+// Mock axios to avoid real network calls to Piston
+const axios = require('axios');
+jest.mock('axios');
+
+// We need to require the server, but nicely handle port conflicts if testing in parallel or if start logic runs
+// Our index.js exports 'server' and only listens if main. So we can use it.
+const server = require('./index');
+
+describe('Full Stack Client-Server Interaction', () => {
+    let clientSocket;
     let port;
 
     beforeAll((done) => {
-        // Setup a real socket server for testing
-        httpServer = createServer();
-        io = new Server(httpServer);
-
-        // We reuse logic or mock behavior if we imported app, 
-        // but here we manually test the event flow logic to verify the protocol
-        // matching index.js behavior.
-
-        io.on('connection', (socket) => {
-            socket.on('join', ({ roomId, userName }) => {
-                socket.join(roomId);
-                const user = { id: socket.id, name: userName };
-                socket.to(roomId).emit('user_joined', user);
-            });
-            socket.on('code_change', ({ roomId, code }) => {
-                socket.to(roomId).emit('code_update', code);
-            });
-            // Mock execute handler for integration test
-            socket.on('execute', ({ roomId, language }) => {
-                // Simulate piston response broadcast
-                io.to(roomId).emit('execution_result', { run: { output: 'Hello World\n' } });
-            });
+        // Setup mock response
+        axios.post.mockResolvedValue({
+            data: {
+                run: { output: 'Mocked Execution Output\n' },
+                language: 'python'
+            }
         });
 
-        httpServer.listen(() => {
-            port = httpServer.address().port;
-            clientSocket1 = new Client(`http://localhost:${port}`);
-            clientSocket1.on('connect', done);
+        // Start the server on a random port for testing
+        // Note: server.listen is not called in index.js when imported, so we call it here.
+        server.listen(0, () => {
+            port = server.address().port;
+            done();
         });
     });
 
-    afterAll(() => {
-        io.close();
-        clientSocket1.close();
-        if (clientSocket2) clientSocket2.close();
-        httpServer.close();
+    afterAll((done) => {
+        server.close(done);
+        if (clientSocket) clientSocket.close();
     });
 
-    test('should communicate code changes between clients', (done) => {
-        const roomId = 'room-1';
+    test('REST Execution should broadcast to Socket Client', (done) => {
+        const roomId = 'verify-interaction-room';
+        const sourceCode = 'print("Integration Test")';
 
-        clientSocket1.emit('join', { roomId, userName: 'Client1' });
+        // 1. Connect a Socket Client to the room
+        clientSocket = new Client(`http://localhost:${port}`);
 
-        // Connect second client
-        clientSocket2 = new Client(`http://localhost:${port}`);
-        clientSocket2.on('connect', () => {
-            clientSocket2.emit('join', { roomId, userName: 'Client2' });
-
-            // Listen for code update on client 2
-            clientSocket2.on('code_update', (code) => {
-                try {
-                    expect(code).toBe('console.log("test")');
-                    done();
-                } catch (error) {
-                    done(error);
-                }
-            });
-
-            // Send from client 1
-            setTimeout(() => {
-                clientSocket1.emit('code_change', { roomId, code: 'console.log("test")' });
-            }, 50);
+        clientSocket.on('connect', () => {
+            // Join Room
+            clientSocket.emit('join', { roomId, userName: 'TestUser' });
         });
-    });
 
-    test('should broadcast execution results', (done) => {
-        const roomId = 'room-exec';
-        const outputData = { run: { output: 'Hello World\n' } };
+        // 2. Listen for execution_result (This verifies Server -> Client interaction via Socket)
+        clientSocket.on('execution_result', (data) => {
+            try {
+                // Verify Piston execution result structure
+                expect(data).toHaveProperty('run');
+                done();
+            } catch (error) {
+                done(error);
+            }
+        });
 
-        // Mock axios post for execution (since we are testing socket logic, not external API)
-        // REQUIRED: We need to mock axios in the server file or this test will try to hit real Piston API.
-        // However, for integration test of *sockets*, we can check if the server *attempts* to broadcast.
-        // But since we can't easily mock require('axios') inside the running server from here without heavy lifting,
-        // We will assume the Piston API call might fail or we can just verify the 'execute' event logic if we had mocked it.
+        // 3. Trigger Execution via REST API (Simulating the Client's Run button)
+        // Ensure user has joined first
+        setTimeout(async () => {
+            try {
+                console.log('Test: Verifying Room via API...');
+                // Verify Room Exists via API first
+                const roomRes = await request(server).get(`/api/rooms/${roomId}`);
+                expect(roomRes.status).toBe(200);
+                expect(roomRes.body.usersCount).toBe(1);
 
-        // ALTERNATIVE: Use a mock implementation in the server code itself for testing?
-        // OR: Just trust that if we mock the socket event emission it works?
-        // Real integration test hitting Piston is slow/flaky.
+                console.log('Test: Initializing Execution Request...');
+                // Execute
+                const res = await request(server)
+                    .post('/api/execute')
+                    .send({
+                        roomId,
+                        language: 'python',
+                        sourceCode,
+                        version: '3.10.0'
+                    });
 
-        // Let's rely on the code change we made. But user ASKED for tests.
-        // We can mock the Piston response if we inject it, or we try to hit it (it's public API).
-        // Let's try hitting it (Real Integration).
+                console.log('Test: Execution Response received', res.status);
+                expect(res.status).toBe(200);
+                expect(res.body).toHaveProperty('run');
 
-        // Join Room
-        clientSocket1.emit('join', { roomId, userName: 'ExecUser1' });
+                // If we get here, REST part worked. 
+                // We still wait for socket event to call done(), unless it already happened.
+                // But socket event might happen BEFORE or AFTER response.
+            } catch (err) {
+                console.error('Test Error:', err);
+                done(err);
+            }
+        }, 500); // Small delay to ensure join completes
+    }, 15000); // 15s timeout
 
-        // Connect Client 2
-        const cs2 = new Client(`http://localhost:${port}`);
-        cs2.on('connect', () => {
-            cs2.emit('join', { roomId, userName: 'ExecUser2' });
+    test('Socket Code Change should broadcast to other clients', (done) => {
+        const roomId = 'sync-room';
+        const client1 = new Client(`http://localhost:${port}`);
+        let client2;
 
-            cs2.on('execution_result', (data) => {
-                try {
-                    // Piston returns structure
-                    expect(data).toBeDefined();
-                    cs2.close();
-                    done();
-                } catch (e) {
-                    cs2.close();
-                    done(e);
-                }
-            });
+        client1.on('connect', () => {
+            client1.emit('join', { roomId, userName: 'SyncUser1' });
 
-            // Trigger execute from Client 1
-            setTimeout(() => {
-                clientSocket1.emit('execute', {
-                    roomId,
-                    language: 'python',
-                    sourceCode: 'print("Hello")',
-                    version: '3.10.0'
+            client2 = new Client(`http://localhost:${port}`);
+            client2.on('connect', () => {
+                client2.emit('join', { roomId, userName: 'SyncUser2' });
+
+                client2.on('code_update', (code) => {
+                    try {
+                        expect(code).toBe('console.log("Sync Test")');
+                        client1.close();
+                        client2.close();
+                        done();
+                    } catch (err) {
+                        client1.close();
+                        client2.close();
+                        done(err);
+                    }
                 });
-            }, 100);
+
+                // Trigger update from Client 1
+                setTimeout(() => {
+                    client1.emit('code_change', { roomId, code: 'console.log("Sync Test")' });
+                }, 100);
+            });
         });
-    });
+    }, 5000);
 });

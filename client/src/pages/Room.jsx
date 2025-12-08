@@ -16,8 +16,8 @@ const Room = () => {
     const [socket, setSocket] = useState(null);
     const [users, setUsers] = useState([]);
     const [currentUser, setCurrentUser] = useState(null);
-    const [code, setCode] = useState('// Start coding...');
-    const [language, setLanguage] = useState('javascript');
+    const [code, setCode] = useState('');
+    const [language, setLanguage] = useState('python');
     const [output, setOutput] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -33,11 +33,12 @@ const Room = () => {
         if (initialized.current) return;
         initialized.current = true;
 
-        // Prompt Name
-        let name = window.prompt('Enter your name:', 'Guest');
-        if (!name) name = 'Guest';
+        // Prompt Name - Strict
+        let name = '';
+        while (!name) {
+            name = window.prompt('Enter your name (Required):');
+        }
         setCurrentUser({ name });
-
         // Connect Socket
         const s = io(SOCKET_URL);
         setSocket(s);

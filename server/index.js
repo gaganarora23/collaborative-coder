@@ -3,7 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const axios = require('axios');
-const { addUser, removeUser, updateCode, updateLanguage, updateOutput, getRoom } = require('./roomManager');
+const { addUser, removeUser, updateCode, updateLanguage, updateOutput, getRoom, hasRoom } = require('./roomManager');
 
 const app = express();
 app.use(cors());
@@ -123,10 +123,10 @@ app.post('/api/execute', async (req, res) => {
 
 app.get('/api/rooms/:roomId', (req, res) => {
     const { roomId } = req.params;
-    const room = getRoom(roomId);
-    if (!room) {
+    if (!hasRoom(roomId)) {
         return res.status(404).json({ exists: false });
     }
+    const room = getRoom(roomId);
     res.json({
         exists: true,
         language: room.language,

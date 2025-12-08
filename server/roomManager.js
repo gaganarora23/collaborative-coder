@@ -1,8 +1,12 @@
 // { [roomId]: { code: string, language: string, users: Array<{id: string, name: string}> } }
 const rooms = {};
 
-const DEFAULT_CODE = '// Start coding...';
-const DEFAULT_LANG = 'javascript';
+const DEFAULT_CODE = '';
+const DEFAULT_LANG = 'python';
+
+const hasRoom = (roomId) => {
+    return !!rooms[roomId];
+};
 
 const getRoom = (roomId) => {
     if (!rooms[roomId]) {
@@ -26,6 +30,7 @@ const addUser = (roomId, user) => {
 
 const removeUser = (socketId) => {
     let affectedRoomId = null;
+    let affectedRoom = null;
     for (const roomId in rooms) {
         const room = rooms[roomId];
         const index = room.users.findIndex(u => u.id === socketId);
@@ -35,10 +40,11 @@ const removeUser = (socketId) => {
                 delete rooms[roomId];
             }
             affectedRoomId = roomId;
+            affectedRoom = room;
             break;
         }
     }
-    return affectedRoomId ? { roomId: affectedRoomId, room: rooms[affectedRoomId] } : null;
+    return affectedRoomId ? { roomId: affectedRoomId, room: affectedRoom } : null;
 };
 
 const updateCode = (roomId, code) => {
@@ -61,6 +67,7 @@ const updateOutput = (roomId, output) => {
 
 module.exports = {
     getRoom,
+    hasRoom,
     addUser,
     removeUser,
     updateCode,
