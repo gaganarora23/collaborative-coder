@@ -1,0 +1,80 @@
+openapi: 3.0.0
+info:
+  title: Collaborative Coder API
+  version: 1.0.0
+  description: API for the real-time collaborative coding platform.
+servers:
+  - url: http://localhost:3001
+    description: Local development server
+paths:
+  /api/execute:
+    post:
+      summary: Execute code
+      description: Execute code using the Piston API and broadcast results to the room via Socket.IO.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - roomId
+                - language
+                - sourceCode
+              properties:
+                roomId:
+                  type: string
+                  description: ID of the room to broadcast results to.
+                language:
+                  type: string
+                  description: Programming language (e.g., python, javascript).
+                sourceCode:
+                  type: string
+                  description: The source code to execute.
+                version:
+                  type: string
+                  description: Language version (optional, defaults to *).
+                  default: "*"
+      responses:
+        '200':
+          description: Execution started/completed. Result is returned and also broadcasted.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run:
+                    type: object
+                    description: The execution result from Piston.
+                  message:
+                    type: string
+        '400':
+          description: Bad request
+        '500':
+          description: Execution failed
+  /api/rooms/{roomId}:
+    get:
+      summary: Get room info
+      description: Retrieve current state or metadata of a room.
+      parameters:
+        - in: path
+          name: roomId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Room details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exists:
+                    type: boolean
+                  language:
+                    type: string
+                  usersCount:
+                    type: integer
+        '404':
+          description: Room not found
