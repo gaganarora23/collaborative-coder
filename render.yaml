@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: collaborative-coder
+    env: docker
+    plan: free
+    region: oregon 
+    envVars:
+      - key: PORT
+        value: 3001
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /api/rooms/health-check
+    dockerContext: .
+    dockerfilePath: Dockerfile

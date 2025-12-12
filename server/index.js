@@ -125,6 +125,11 @@ app.get('/api/rooms/:roomId', (req, res) => {
     });
 });
 
+// Health Check
+app.get('/api/rooms/health-check', (req, res) => {
+    res.status(200).send('OK');
+});
+
 // Serve Frontend for any other route (SPA catch-all) – MUST BE LAST
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
