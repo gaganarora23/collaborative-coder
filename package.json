@@ -1,0 +1,17 @@
+{
+    "name": "collaborative-coder-monorepo",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "test": "concurrently \"npm run test:client\" \"npm run test:server\"",
+        "test:client": "cd client && npm run test",
+        "test:server": "cd server && npm run test",
+        "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+        "dev:client": "cd client && npm run dev",
+        "dev:server": "cd server && npm run dev",
+        "install:all": "concurrently \"cd client && npm install\" \"cd server && npm install\""
+    },
+    "devDependencies": {
+        "concurrently": "^8.2.2"
+    }
+}

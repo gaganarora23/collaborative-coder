@@ -41,6 +41,11 @@ A real-time collaborative coding interview platform supporting multiple language
     npm run dev -- --host
     ```
 
+    # incase ports are not available
+    ```bash
+    lsof -t -i:3001 -i:5173 | xargs kill -9
+    ```
+
 3.  **Access**: Open `http://localhost:5173`.
 
 ## Testing

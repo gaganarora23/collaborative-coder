@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const path = require('path'); // Added
 const { Server } = require('socket.io');
 const cors = require('cors');
 const axios = require('axios');
@@ -8,6 +9,9 @@ const { addUser, removeUser, updateCode, updateLanguage, updateOutput, getRoom, 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from 'public' directory
+app.use(express.static(path.join(__dirname, 'public')));
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -20,6 +24,7 @@ const io = new Server(server, {
 const PISTON_API_URL = 'https://emkc.org/api/v2/piston/execute';
 
 io.on('connection', (socket) => {
+    // ... socket logic ...
     console.log('User connected:', socket.id);
 
     socket.on('join', ({ roomId, userName }) => {
@@ -29,10 +34,7 @@ io.on('connection', (socket) => {
 
         console.log(`User ${user.name} joined ${roomId}`);
 
-        // Broadcast to room (including sender is fine for list update, but better to be explicit)
         io.to(roomId).emit('user_list_update', room.users);
-
-        // Send init state to user
         socket.emit('init_state', {
             code: room.code,
             language: room.language,
@@ -51,17 +53,10 @@ io.on('connection', (socket) => {
     });
 
     socket.on('cursor_move', ({ roomId, position, userName }) => {
-        // Broadcast to others in the room
-        socket.to(roomId).emit('cursor_update', {
-            id: socket.id,
-            userName,
-            position
-        });
+        socket.to(roomId).emit('cursor_update', { id: socket.id, userName, position });
     });
 
     socket.on('execute', async ({ roomId, language, sourceCode, version = '*' }) => {
-        // Legacy socket execution - keeping for backward compatibility or direct socket use
-        // But ideally we should route this logic to a common handler.
         try {
             console.log('Executing (Socket)', language);
             const response = await axios.post(PISTON_API_URL, {
@@ -89,7 +84,7 @@ io.on('connection', (socket) => {
     });
 });
 
-// REST API based on OpenAPI Spec
+// REST API
 app.post('/api/execute', async (req, res) => {
     const { roomId, language, sourceCode, version = '*' } = req.body;
 
@@ -106,16 +101,12 @@ app.post('/api/execute', async (req, res) => {
         });
         const result = response.data;
         updateOutput(roomId, { result });
-
-        // Broadcast result to room via Socket
         io.to(roomId).emit('execution_result', result);
-
         res.json(result);
     } catch (error) {
         console.error('Execution error', error.message);
         const errPayload = { message: 'Execution failed: ' + error.message };
         updateOutput(roomId, { error: errPayload.message });
-
         io.to(roomId).emit('execution_error', errPayload);
         res.status(500).json(errPayload);
     }
@@ -134,8 +125,12 @@ app.get('/api/rooms/:roomId', (req, res) => {
     });
 });
 
+// Serve Frontend for any other route (SPA catch-all) – MUST BE LAST
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 const PORT = process.env.PORT || 3001;
-// Export server for testing if needed, or run it
 if (require.main === module) {
     server.listen(PORT, () => {
         console.log(`Server running on port ${PORT}`);
