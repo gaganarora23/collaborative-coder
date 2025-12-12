@@ -4,7 +4,7 @@ import { v4 as uuidV4 } from 'uuid';
 
 import axios from 'axios';
 
-const SOCKET_URL = 'http://localhost:3001';
+const SOCKET_URL = import.meta.env.PROD ? window.location.origin : 'http://localhost:3001';
 
 const Home = () => {
     const navigate = useNavigate();

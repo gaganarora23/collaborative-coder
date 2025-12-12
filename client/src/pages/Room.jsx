@@ -7,7 +7,7 @@ import Controls, { LANGUAGES } from '../components/Controls';
 import UserList from '../components/UserList';
 import Output from '../components/Output';
 
-const SOCKET_URL = 'http://localhost:3001';
+const SOCKET_URL = import.meta.env.PROD ? window.location.origin : 'http://localhost:3001';
 
 const Room = () => {
     const { roomId } = useParams();
